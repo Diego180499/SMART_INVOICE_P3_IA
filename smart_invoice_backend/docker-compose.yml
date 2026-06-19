@@ -1,0 +1,50 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: smartinvoice_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-smart_invoice}
+      MYSQL_USER: ${DB_USER:-smart_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-smart_pass_123}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      # CMD-SHELL permite que el shell del contenedor expanda $MYSQL_ROOT_PASSWORD
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      # start_period da tiempo a MySQL para ejecutar los init scripts antes de
+      # que el healthcheck empiece a contar fallos
+      start_period: 40s
+
+  backend:
+    build: .
+    container_name: smartinvoice_backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-smart_invoice}
+      DB_USER: ${DB_USER:-smart_user}
+      DB_PASSWORD: ${DB_PASSWORD:-smart_pass_123}
+      SECRET_KEY: ${SECRET_KEY:-cambia_esta_clave_secreta}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 480
+      OCR_LANG: spa+eng
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./reports:/app/reports
+
+volumes:
+  mysql_data:
