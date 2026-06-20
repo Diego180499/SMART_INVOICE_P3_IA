@@ -1,0 +1,12 @@
+# Compose independiente para servir solo el frontend.
+# Para ejecutar todo el sistema junto, ver la sección "Despliegue" del README.
+services:
+  frontend:
+    build: .
+    container_name: smartinvoice_frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"          # http://localhost:8080  (origen permitido por el CORS del backend)
+    environment:
+      # URL del backend. Si se omite, el frontend usa http://<host>:8000 / localhost:8000.
+      API_URL: ${API_URL:-http://localhost:8000}
