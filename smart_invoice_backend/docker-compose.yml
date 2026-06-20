@@ -14,13 +14,10 @@ services:
       - mysql_data:/var/lib/mysql
       - ./db/init:/docker-entrypoint-initdb.d
     healthcheck:
-      # CMD-SHELL permite que el shell del contenedor expanda $MYSQL_ROOT_PASSWORD
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
       timeout: 5s
       retries: 15
-      # start_period da tiempo a MySQL para ejecutar los init scripts antes de
-      # que el healthcheck empiece a contar fallos
       start_period: 40s
 
   backend:
@@ -40,11 +37,46 @@ services:
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 480
       OCR_LANG: spa+eng
+      # El .env queda excluido por .dockerignore; por eso definimos aqui el origen
+      # del frontend (puerto 8080) para que el CORS del backend lo acepte.
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:8080,http://localhost:3000,http://localhost:5173}"
+      # URL del formulario simulado, alcanzable por el NOMBRE DE SERVICIO dentro de
+      # la red de Docker (no 'localhost', que apuntaria al propio contenedor backend).
+      # Valor LITERAL a proposito: el .env del backend define RPA_FORM_URL con
+      # localhost (correcto para correr el backend fuera de Docker), pero dentro
+      # de la red de Docker debe ser el nombre de servicio del formulario.
+      RPA_FORM_URL: "http://rpa_form:3000/formulario-simulado"
+      RPA_HEADLESS: "true"
     ports:
       - "8000:8000"
     volumes:
       - ./uploads:/app/uploads
       - ./reports:/app/reports
 
+  frontend:
+    # Interfaz web (Nginx con el SPA). Contexto de build: carpeta hermana.
+    build: ../smart_invoice_frontend
+    container_name: smartinvoice_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # URL del backend usada por el NAVEGADOR; apunta al host publicado
+      # (localhost:8000), no al nombre interno del servicio. Se inyecta en env.js.
+      API_URL: "${API_URL:-http://localhost:8000}"
+    ports:
+      - "8080:80"
+
+  rpa_form:
+    # Formulario web simulado (sistema externo) al que el RPA ingresa los datos.
+    build: ../smart_invoice_rpa_form
+    container_name: smartinvoice_rpa_form
+    restart: unless-stopped
+    ports:
+      - "3000:3000"        # http://localhost:3000  (para ver los registros recibidos)
+    volumes:
+      - rpa_form_data:/data
+
 volumes:
   mysql_data:
+  rpa_form_data:
